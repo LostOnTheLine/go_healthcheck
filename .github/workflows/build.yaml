@@ -14,7 +14,7 @@ on:
         default: patch
 
 permissions:
-  contents: write
+  contents: write  # Needed to push tags and create releases
 
 jobs:
   build-and-release:
@@ -43,7 +43,6 @@ jobs:
           # Split the version parts
           IFS='.' read -r major minor patch <<<"$ver"
 
-          # Increment version according to release type
           if [[ "$RELEASE_TYPE" == "major" ]]; then
             major=$((major + 1))
             minor=0
@@ -59,11 +58,13 @@ jobs:
           echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
           echo "New tag: $NEW_TAG"
 
-      - name: Build Go binary
+      - name: Setup Go
         uses: actions/setup-go@v4
         with:
           go-version: '1.23'
-      - run: |
+
+      - name: Build static binary
+        run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o healthcheck ./healthcheck.go
 
       - name: Configure Git for Tag Push
@@ -73,10 +74,11 @@ jobs:
 
       - name: Create and push tag
         run: |
-          git tag ${{ steps.increment_version.outputs.new_tag }}
-          git push origin ${{ steps.increment_version.outputs.new_tag }}
+          git tag "${{ steps.increment_version.outputs.new_tag }}"
+          git push origin "${{ steps.increment_version.outputs.new_tag }}"
 
       - name: Create GitHub Release
+        id: create_release
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -91,7 +93,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ steps.create_release.outputs.upload_url || github.event.release.upload_url }}
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./healthcheck
           asset_name: healthcheck-linux-amd64
           asset_content_type: application/octet-stream
